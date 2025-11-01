@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-F-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clark County Departments - Status Board</title>
+    
+    <link rel="icon" type="image/x-icon" href="./images/256.ico">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .animate-spin { animation: spin 1s linear infinite; }
+        .confirm-modal-button { transition: background-color 0.2s; }
+        
+        #admin-content, #auth-container {
+            display: none;
+        }
+        /* Style for disabled buttons */
+        button:disabled, button[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="bg-gray-200 dark:bg-gray-900 font-sans">
+    <header class="bg-red-700 shadow-lg">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl md:text-3xl font-bold text-center text-white">CLARK COUNTY DEPARTMENTS FIRE/EMS STATUS - ADMIN PANEL</h1>
+            <button id="sign-out-button" class="hidden bg-gray-100 dark:bg-gray-700 text-red-700 dark:text-white font-bold py-2 px-4 rounded-md hover:bg-gray-200 transition-colors">Sign Out</button>
+        </div>
+    </header>
+
+    <!-- This container holds the main app -->
+    <div id="admin-content">
+        <main id="app-container" class="container mx-auto p-4 md:p-8">
+            <div id="error-container" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
+                <p class="font-bold">Error</p>
+                <p id="error-message"></p>
+            </div>
+
+            <!-- This spinner is for loading data AFTER login -->
+            <div id="spinner-container" class="flex justify-center items-center h-full py-16">
+                <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-red-600"></div>
+            </div>
+            
+            <div id="content-container" class="hidden">
+                <!-- ADD STATION FORM - Now hidden by default, shown for super-admins -->
+                <div id="add-station-form-container" class="hidden mb-8 bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <form id="add-station-form" class="flex flex-col sm:flex-row gap-4 items-end">
+                        <div class="flex-grow w-full">
+                            <label for="station-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">New Station Name</label>
+                            <input type="text" id="station-name" name="stationName" class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-red-500 focus:ring-red-500 bg-white dark:bg-gray-700 dark:text-gray-200" placeholder="e.g., Station 12" required>
+                        </div>
+                        <div class="flex-grow w-full">
+                            <label for="manager-uid" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Manager User UID</label>
+                            <input type="text" id="manager-uid" name="managerUid" class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-red-500 focus:ring-red-500 bg-white dark:bg-gray-700 dark:text-gray-200" placeholder="Paste User UID of manager" required>
+                        </div>
+                         <div class="flex-grow w-full">
+                            <label for="updater-uid" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Updater User UID (Optional)</label>
+                            <input type="text" id="updater-uid" name="updaterUid" class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-red-500 focus:ring-red-500 bg-white dark:bg-gray-700 dark:text-gray-200" placeholder="Paste User UID of updater">
+                        </div>
+                        <button type="submit" class="w-full sm:w-auto bg-red-600 text-white font-bold py-2 px-6 rounded-md hover:bg-red-700 transition-colors">Add Station</button>
+                    </form>
+                </div>
+                
+                <div id="stations-container" class="space-y-8">
+                    <!-- Stations will be injected here -->
+                </div>
+                 <div id="no-stations-message" class="hidden text-center py-16">
+                    <p class="text-2xl text-gray-500 dark:text-gray-400">No stations are assigned to your account.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- This container holds the login UI -->
+    <div id="auth-container" class="container mx-auto p-4 md:p-8">
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md mx-auto mt-10">
+            <h2 class="text-2xl font-bold text-center text-gray-800 dark:text-gray-100 mb-6">Admin Sign-In</h2>
+            <p class="text-center text-gray-600 dark:text-gray-300 mb-6">You must sign in with an authorized account to manage the status board.</p>
+            
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label for="login-email" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Email Address</label>
+                    <input type="email" id="login-email" name="email" required class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-red-500 focus:ring-red-500 bg-white dark:bg-gray-700 dark:text-gray-200">
+                </div>
+                <div>
+                    <label for="login-password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
+                    <input type="password" id="login-password" name="password" required class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-red-500 focus:ring-red-500 bg-white dark:bg-gray-700 dark:text-gray-200">
+                </div>
+                <div id="login-error" class="text-red-500 text-sm hidden"></div>
+                <div>
+                    <button type="submit" id="login-button" class="w-full bg-red-600 text-white font-bold py-2 px-6 rounded-md hover:bg-red-700 transition-colors disabled:opacity-50">
+                        Sign In
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+
+
+    <!-- Modals -->
+    <div id="add-crew-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-md relative">
+            <button id="add-crew-modal-close" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <div id="add-crew-modal-content"></div>
+        </div>
+    </div>
+    <div id="confirm-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 justify-center items-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-sm text-center">
+            <p id="confirm-modal-message" class="text-lg mb-6 dark:text-gray-200"></p>
+            <div class="flex justify-center gap-4">
+                <button id="confirm-modal-cancel" class="confirm-modal-button w-24 bg-gray-500 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600">Cancel</button>
+                <button id="confirm-modal-confirm" class="confirm-modal-button w-24 bg-red-600 text-white font-bold py-2 px-4 rounded-md hover:bg-red-700">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    
+    <script>
+        const firebaseConfig = {
+          apiKey: "AIzaSyAaCahDa2xTO_ukTIhR3KLUCWPUI4dBd-o",
+          authDomain: "clark-county-fire-status.firebaseapp.com",
+          projectId: "clark-county-fire-status",
+          storageBucket: "clark-county-fire-status.firebasestorage.app",
+          messagingSenderId: "60516695608",
+          appId: "1:60516695608:web:24b87b5d108ba5ea2830cd",
+          measurementId: "G-GBBK5WTWR9"
+        };
+
+        let db, auth;
+        let firestoreUnsubscribe = null;
+        
+        // This will be 'super-admin', 'manager', 'updater', or null
+        let currentUserRole = null; 
+        let currentUserUID = null;
+
+        // --- Auth DOM References ---
+        const authContainer = document.getElementById('auth-container');
+        const adminContent = document.getElementById('admin-content');
+        const signOutButton = document.getElementById('sign-out-button');
+        
+        const loginForm = document.getElementById('login-form');
+        const loginEmail = document.getElementById('login-email');
+        const loginPassword = document.getElementById('login-password');
+        const loginButton = document.getElementById('login-button');
+        const loginError = document.getElementById('login-error');
+
+        // --- Other DOM References ---
+        const spinner = document.getElementById('spinner-container');
+        const errorContainer = document.getElementById('error-container');
+        const errorMessage = document.getElementById('error-message');
+        const contentContainer = document.getElementById('content-container');
+        const addStationForm = document.getElementById('add-station-form');
+        const addStationFormContainer = document.getElementById('add-station-form-container');
+        const stationsContainer = document.getElementById('stations-container');
+        const noStationsMessage = document.getElementById('no-stations-message');
+        
+        const addCrewModal = document.getElementById('add-crew-modal');
+        const addCrewModalContent = document.getElementById('add-crew-modal-content');
+        const addCrewModalClose = document.getElementById('add-crew-modal-close');
+        const confirmModal = document.getElementById('confirm-modal');
+        const confirmModalMessage = document.getElementById('confirm-modal-message');
+        const confirmModalCancel = document.getElementById('confirm-modal-cancel');
+        const confirmModalConfirm = document.getElementById('confirm-modal-confirm');
+        let currentAddCrewStationId = null;
+
+        function showError(message) {
+            spinner.classList.add('hidden');
+            errorMessage.textContent = message;
+            errorContainer.classList.remove('hidden');
+            contentContainer.classList.add('hidden');
+        }
+
+        // --- Firestore Listener Function ---
+        function listenToFirestore(role, uid) {
+            if (firestoreUnsubscribe) {
+                firestoreUnsubscribe();
+            }
+            spinner.classList.remove('hidden');
+            contentContainer.classList.add('hidden');
+            noStationsMessage.classList.add('hidden');
+
+            try {
+                let query;
+                // Note: Firestore doesn't support OR queries, so a user can only see
+                // stations based on their *primary role* in the /admins collection.
+                if (role === 'super-admin') {
+                    query = db.collection("stations");
+                } else if (role === 'manager') {
+                    query = db.collection("stations").where("managedBy", "==", uid);
+                } else if (role === 'updater') {
+                     query = db.collection("stations").where("updater", "==", uid);
+                } else {
+                    // This user has no role, show no stations.
+                    query = db.collection("stations").where("managedBy", "==", "INVALID_UID_TO_GET_NOTHING");
+                }
+
+                firestoreUnsubscribe = query.onSnapshot(snapshot => {
+                    const stations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    renderStations(stations);
+                }, err => {
+                    console.error("Error fetching stations:", err);
+                    showError("Could not fetch data from the database. This is likely a permissions issue.");
+                });
+            } catch (err) {
+                console.error("Error setting up listener:", err);
+                showError("Failed to connect to the database.");
+            }
+        }
+
+        // --- UI Rendering Functions ---
+        function renderStations(stations) {
+            spinner.classList.add('hidden');
+            contentContainer.classList.remove('hidden');
+            
+            // Show/Hide Add Station form based on role
+            if (currentUserRole === 'super-admin') {
+                addStationFormContainer.classList.remove('hidden');
+            } else {
+                addStationFormContainer.classList.add('hidden');
+            }
+
+            if (stations.length === 0) {
+                noStationsMessage.classList.remove('hidden');
+                stationsContainer.innerHTML = '';
+            } else {
+                noStationsMessage.classList.add('hidden');
+                stations.sort((a, b) => a.name.localeCompare(b.name));
+                stationsContainer.innerHTML = stations.map(station => createStationHTML(station, currentUserRole, currentUserUID)).join('');
+            }
+        }
+
+        function createStationHTML(station, role, uid) {
+            // --- Permission Checks ---
+            const isSuperAdmin = (role === 'super-admin');
+            
+            // Check based on the *field* on the station doc
+            const isAssignedManager = (station.managedBy === uid);
+            const isAssignedUpdater = (station.updater === uid);
+            
+            // Check based on the *role* from the /admins collection
+            const isManagerRole = (role === 'manager');
+            const isUpdaterRole = (role === 'updater');
+
+            // Can edit if:
+            // 1. You are super-admin
+            // 2. Your role is 'manager' AND you are the assigned manager
+            // 3. Your role is 'updater' AND you are the assigned updater
+            const canEditThisStation = isSuperAdmin || (isManagerRole && isAssignedManager) || (isUpdaterRole && isAssignedUpdater);
+            
+            // Can add/delete crews if:
+            // 1. You are super-admin
+            // 2. Your role is 'manager' AND you are the assigned manager
+            const canManageCrews = isSuperAdmin || (isManagerRole && isAssignedManager);
+
+            // Can delete station ONLY if super-admin
+            const canDeleteThisStation = isSuperAdmin;
+            
+            
+            // --- Visual Indicators ---
+            let headerBadge = '';
+            if (isSuperAdmin) {
+                headerBadge = `<span class="text-xs bg-red-800 text-white font-bold py-1 px-2 rounded-full">Super Admin</span>`;
+            } else if (isManagerRole && isAssignedManager) {
+                headerBadge = `<span class="text-xs bg-blue-700 text-white font-bold py-1 px-2 rounded-full">Manager</span>`;
+            } else if (isUpdaterRole && isAssignedUpdater) {
+                 headerBadge = `<span class="text-xs bg-yellow-600 text-white font-bold py-1 px-2 rounded-full">Updater</span>`;
+            } else {
+                // This case handles a super-admin viewing a station they don't manage
+                // Or if data is somehow mismatched.
+                headerBadge = `<span class="text-xs bg-gray-600 text-white font-bold py-1 px-2 rounded-full">Viewing</span>`;
+            }
+
+            // If they can't edit, add an opacity class to the whole card
+            const stationLockClass = canEditThisStation ? '' : 'opacity-70';
+
+            const totalEMS = station.crews.filter(c => c.status === 'On Duty').reduce((sum, c) => sum + (c.emsPersonnel || 0) + (c.fireEmsPersonnel || 0), 0);
+            const totalFire = station.crews.filter(c => c.status === 'On Duty').reduce((sum, c) => sum + (c.firePersonnel || 0) + (c.fireEmsPersonnel || 0), 0);
+            
+            return `
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden ${stationLockClass}">
+                    <div class="p-4 bg-gray-900 text-white flex justify-between items-center">
+                        <h2 class="text-2xl font-bold">${station.name}</h2>
+                        <div class="flex items-center gap-4">
+                           ${headerBadge}
+                           <div class="flex gap-2">
+                               <button data-action="open-add-crew-modal" data-station-id="${station.id}" class="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 transition-colors ${canManageCrews ? '' : 'hidden'}" ${canManageCrews ? '' : 'disabled'}>+ Add Crew</button>
+                               <button data-action="delete-station" data-station-id="${station.id}" data-station-name="${station.name}" class="bg-red-800 text-white font-bold p-2 rounded-md hover:bg-red-900 transition-colors ${canDeleteThisStation ? '' : 'hidden'}" ${canDeleteThisStation ? '' : 'disabled'}><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg></button>
+                           </div>
+                        </div>
+                    </div>
+                    <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-100 dark:bg-gray-700 border-b-4 border-red-600">
+                        <div class="bg-blue-100 dark:bg-blue-900 p-3 rounded-lg text-center">
+                            <p class="text-lg font-semibold text-blue-800 dark:text-blue-200">Total EMS On Duty</p>
+                            <p class="text-4xl font-bold text-blue-900 dark:text-blue-100">${totalEMS}</p>
+                        </div>
+                        <div class="bg-orange-100 dark:bg-orange-900 p-3 rounded-lg text-center">
+                            <p class="text-lg font-semibold text-orange-800 dark:text-orange-200">Total Fire On Duty</p>
+                            <p class="text-4xl font-bold text-orange-900 dark:text-orange-100">${totalFire}</p>
+                        </div>
+                    </div>
+                     <div class="p-2 md:p-4">
+                        <div class="hidden md:grid grid-cols-12 gap-2 font-bold text-sm text-gray-600 dark:text-gray-300 p-3">
+                            <div class="col-span-3">Crew</div>
+                            <div class="col-span-2 text-center">Status</div>
+                            <div class="col-span-2 text-center">EMS</div>
+                            <div class="col-span-2 text-center">Fire</div>
+                            <div class="col-span-2 text-center">Fire/EMS</div>
+                            <div class="col-span-1 text-center">Actions</div>
+                        </div>
+                        ${station.crews.length > 0 ? station.crews.sort((a,b) => a.name.localeCompare(b.name)).map(crew => createCrewRowHTML(station.id, crew, canEditThisStation, canManageCrews)).join('') : '<p class="p-4 text-center text-gray-500 dark:text-gray-400">No crews assigned to this station yet.</p>'}
+                    </div>
+                </div>`;
+        }
+        
+        // canEdit: Can change status and counts
+        // canManage: Can delete
+        function createCrewRowHTML(stationId, crew, canEdit, canManage) {
+            const statusButtonClass = crew.status === 'On Duty' 
+                ? 'bg-green-600 hover:bg-green-700 text-white' 
+                : 'bg-gray-500 hover:bg-gray-600 text-white';
+            const personnelButtonClasses = "bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-gray-200 font-bold h-8 w-8 rounded-full hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors flex items-center justify-center";
+            
+            const disabledAttr = canEdit ? '' : 'disabled';
+
+            return `
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-2 items-center p-3 border-b border-gray-200 dark:border-gray-700" data-crew-id="${crew.id}" data-station-id="${stationId}">
+                    <div class="md:col-span-3 font-bold text-gray-800 dark:text-gray-100">${crew.name}</div>
+                    <div class="md:col-span-2">
+                        <button data-action="toggle-status" class="w-full font-semibold py-2 px-3 rounded-md transition-colors ${statusButtonClass}" ${disabledAttr}>${crew.status}</button>
+                    </div>
+                    <div class="md:col-span-2 flex items-center justify-center space-x-2">
+                        <button data-action="decrement" data-field="ems" class="${personnelButtonClasses}" ${disabledAttr}>-</button>
+                        <span class="w-8 text-center font-semibold text-lg dark:text-gray-200">${crew.emsPersonnel || 0}</span>
+                        <button data-action="increment" data-field="ems" class="${personnelButtonClasses}" ${disabledAttr}>+</button>
+                    </div>
+                    <div class="md:col-span-2 flex items-center justify-center space-x-2">
+                        <button data-action="decrement" data-field="fire" class="${personnelButtonClasses}" ${disabledAttr}>-</button>
+                        <span class="w-8 text-center font-semibold text-lg dark:text-gray-200">${crew.firePersonnel || 0}</span>
+                        <button data-action="increment" data-field="fire" class="${personnelButtonClasses}" ${disabledAttr}>+</button>
+                    </div>
+                    <div class="md:col-span-2 flex items-center justify-center space-x-2">
+                        <button data-action="decrement" data-field="fireEms" class="${personnelButtonClasses}" ${disabledAttr}>-</button>
+                        <span class="w-8 text-center font-semibold text-lg dark:text-gray-200">${crew.fireEmsPersonnel || 0}</span>
+                        <button data-action="increment" data-field="fireEms" class="${personnelButtonClasses}" ${disabledAttr}>+</button>
+                    </div>
+                    <div class="md:col-span-1 flex justify-center">
+                        <button data-action="delete-crew" data-crew-name="${crew.name}" class="bg-red-600 text-white font-semibold p-2 rounded-md hover:bg-red-700 ${canManage ? '' : 'hidden'}" ${canManage ? '' : 'disabled'}><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg></button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Event Handlers ---
+        async function handleAddStation(e) {
+            e.preventDefault();
+            const stationName = e.target.stationName.value.trim();
+            const managerUid = e.target.managerUid.value.trim(); 
+            const updaterUid = e.target.updaterUid.value.trim(); // New field
+            
+            if (!stationName || !managerUid) {
+                showError("Station Name and Manager UID are both required.");
+                return;
+            }
+
+            const newStationData = { 
+                name: stationName, 
+                crews: [],
+                managedBy: managerUid,
+                updater: updaterUid || null // Add updater UID, or null if empty
+            };
+            
+            try {
+                await db.collection("stations").add(newStationData);
+                addStationForm.reset();
+            } catch (error) { 
+                console.error("Error adding station: ", error); 
+                showError(`Error adding station: ${error.message}`);
+            }
+        }
+
+        async function handleAddCrew(e) {
+            e.preventDefault();
+            const form = e.target;
+            const newCrewName = form.crewName.value.trim();
+            if (!newCrewName || !currentAddCrewStationId) return;
+
+            form.querySelector('button[type="submit"]').disabled = true;
+            const newCrew = { 
+                name: newCrewName, 
+                status: 'Off Duty', 
+                emsPersonnel: 0, 
+                firePersonnel: 0, 
+                fireEmsPersonnel: 0,
+                id: `crew-${Date.now()}`, 
+                lastUpdated: new Date().toISOString() 
+            };
+            const stationRef = db.collection("stations").doc(currentAddCrewStationId);
+            try {
+                await stationRef.update({ crews: firebase.firestore.FieldValue.arrayUnion(newCrew) });
+                closeAddCrewModal();
+            } catch (error) { console.error("Error adding crew: ", error); }
+        }
+        
+        async function handleCrewAction(e) {
+            const button = e.target;
+            const action = button.dataset.action;
+            if (!action || button.disabled) return; 
+
+            const crewRow = button.closest('[data-crew-id]');
+            const stationId = crewRow.dataset.stationId;
+            const crewId = crewRow.dataset.crewId;
+            const stationRef = db.collection("stations").doc(stationId);
+            
+            button.disabled = true; 
+
+            try {
+                await db.runTransaction(async (transaction) => {
+                    const stationDoc = await transaction.get(stationRef);
+                    if (!stationDoc.exists) throw "Station not found.";
+                    let crews = stationDoc.data().crews;
+                    const crewIndex = crews.findIndex(c => c.id === crewId);
+                    if (crewIndex === -1) throw "Crew not found.";
+                    
+                    const field = button.dataset.field; 
+                    const personnelField = `${field}Personnel`;
+
+                    if (action === 'toggle-status') {
+                        const newStatus = crews[crewIndex].status === 'On Duty' ? 'Off Duty' : 'On Duty';
+                        crews[crewIndex].status = newStatus;
+                        crews[crewIndex].lastUpdated = new Date().toISOString();
+                    } else if (action === 'increment') {
+                        crews[crewIndex][personnelField] = (crews[crewIndex][personnelField] || 0) + 1;
+                        crews[crewIndex].lastUpdated = new Date().toISOString();
+                    } else if (action === 'decrement') {
+                        if (crews[crewIndex][personnelField] > 0) {
+                            crews[crewIndex][personnelField]--;
+                            crews[crewIndex].lastUpdated = new Date().toISOString();
+                        }
+                    } else if (action === 'delete-crew') {
+                        const crewName = button.dataset.crewName;
+                        showConfirmModal(`Delete crew "${crewName}"?`, async () => {
+                            const freshStationDoc = await stationRef.get();
+                            const newCrews = freshStationDoc.data().crews.filter(c => c.id !== crewId);
+                            await stationRef.update({ crews: newCrews });
+                        });
+                        return; 
+                    }
+                    transaction.update(stationRef, { crews: crews });
+                });
+            } catch (err) { 
+                console.error(`Error on action ${action}:`, err); 
+            } finally {
+                // Re-enable button after a short delay to prevent spamming
+                setTimeout(() => {
+                   if (button && action !== 'delete-crew') {
+                       button.disabled = false;
+                   }
+                }, 300);
+            }
+        }
+
+        // --- Modal Functions ---
+        function openAddCrewModal(stationId) {
+            currentAddCrewStationId = stationId;
+            addCrewModalContent.innerHTML = `
+                <h3 class="text-xl font-bold mb-4 dark:text-gray-100">Add New Crew</h3>
+                <form id="add-crew-form">
+                    <input type="text" name="crewName" placeholder="e.g., Engine 12" class="w-full p-2 border rounded-md dark:bg-gray-700 dark:text-gray-200" required autofocus/>
+                    <div class="flex justify-end gap-2 mt-4">
+                        <button type="button" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600" id="cancel-add-crew">Cancel</button>
+                        <button type="submit" class="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700">Add Crew</button>
+                    </div>
+                </form>
+            `;
+            addCrewModal.classList.remove('hidden');
+            addCrewModal.classList.add('flex');
+            document.getElementById('cancel-add-crew').addEventListener('click', closeAddCrewModal);
+        }
+
+        function closeAddCrewModal() {
+            addCrewModal.classList.add('hidden');
+            addCrewModal.classList.remove('flex');
+            currentAddCrewStationId = null;
+        }
+
+        function showConfirmModal(message, onConfirm) {
+            confirmModalMessage.textContent = message;
+            confirmModal.classList.remove('hidden');
+            confirmModal.classList.add('flex');
+            const newConfirmBtn = confirmModalConfirm.cloneNode(true);
+            confirmModalConfirm.parentNode.replaceChild(newConfirmBtn, confirmModalConfirm);
+            newConfirmBtn.addEventListener('click', () => { onConfirm(); closeConfirmModal(); }, { once: true });
+        }
+        function closeConfirmModal() {
+            confirmModal.classList.add('hidden');
+            confirmModal.classList.remove('flex');
+        }
+
+        // --- App Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                auth = firebase.auth();
+                
+                auth.onAuthStateChanged(async (user) => {
+                    if (user && !user.isAnonymous) {
+                        const adminRef = db.collection("admins").doc(user.uid);
+                        const adminDoc = await adminRef.get();
+                        
+                        if (adminDoc.exists) {
+                            currentUserRole = adminDoc.data().role; // 'super-admin', 'manager', 'updater'
+                        } else {
+                            currentUserRole = null; // This user is not in the admins table
+                        }
+                        currentUserUID = user.uid;
+
+                        authContainer.style.display = 'none';
+                        adminContent.style.display = 'block';
+                        signOutButton.classList.remove('hidden');
+                        
+                        loginError.classList.add('hidden');
+                        loginError.textContent = '';
+                        
+                        listenToFirestore(currentUserRole, currentUserUID);
+
+                    } else {
+                        // --- USER IS NOT SIGNED IN ---
+                        authContainer.style.display = 'block';
+                        adminContent.style.display = 'none';
+                        signOutButton.classList.add('hidden');
+                        
+                        currentUserRole = null;
+                        currentUserUID = null;
+                        
+                        if (firestoreUnsubscribe) {
+                            firestoreUnsubscribe();
+                            firestoreUnsubscribe = null;
+                        }
+                        
+                        // Clear any old data
+                        stationsContainer.innerHTML = '';
+                        contentContainer.classList.add('hidden');
+                        spinner.classList.add('hidden');
+                    }
+                });
+
+            } catch (e) {
+                console.error("Firebase initialization error:", e);
+                authContainer.style.display = 'block';
+                loginForm.classList.add('hidden');
+                loginError.textContent = "Fatal Error: Could not initialize Firebase. Check console.";
+                loginError.classList.remove('hidden');
+            }
+        });
+
+        // --- Event Listeners (Forms & Buttons) ---
+        addStationForm.addEventListener('submit', handleAddStation);
+
+        document.addEventListener('submit', (e) => {
+            if (e.target.id === 'add-crew-form') handleAddCrew(e);
+        });
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = loginEmail.value;
+            const password = loginPassword.value;
+
+            loginButton.disabled = true;
+            loginButton.textContent = 'Signing In...';
+            loginError.classList.add('hidden');
+            loginError.textContent = '';
+
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+            } catch (error) {
+                console.error('Login Error:', error.message);
+                loginError.textContent = error.message; 
+                loginError.classList.remove('hidden');
+            } finally {
+                loginButton.disabled = false;
+                loginButton.textContent = 'Sign In';
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            const button = e.target.closest('button');
+            if (!button || button.disabled) return; 
+            
+            const action = button.dataset.action;
+
+            if (action === 'open-add-crew-modal') {
+                openAddCrewModal(button.dataset.stationId);
+            } else if (action === 'delete-station') {
+                showConfirmModal(`Permanently delete ${button.dataset.stationName}?`, () => {
+                    db.collection("stations").doc(button.dataset.stationId).delete();
+                });
+            } else if (['toggle-status', 'increment', 'decrement', 'delete-crew'].includes(action)) {
+                handleCrewAction(e);
+            }
+        });
+
+        signOutButton.addEventListener('click', () => {
+            auth.signOut();
+        });
+
+        addCrewModalClose.addEventListener('click', closeAddCrewModal);
+        confirmModalCancel.addEventListener('click', closeConfirmModal);
+    </script>
+</body>
+</html>
+

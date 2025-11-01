@@ -171,7 +171,9 @@
         const confirmModal = document.getElementById('confirm-modal');
         const confirmModalMessage = document.getElementById('confirm-modal-message');
         const confirmModalCancel = document.getElementById('confirm-modal-cancel');
-        const confirmModalConfirm = document.getElementById('confirm-modal-confirm');
+        // --- FIX ---
+        // We no longer use a global const for confirmModalConfirm, 
+        // as it becomes stale. We will get it by ID inside the showConfirmModal function.
         let currentAddCrewStationId = null;
 
         function showError(message) {
@@ -362,6 +364,11 @@
         }
 
         // --- Event Handlers ---
+        
+        /**
+         * Handles adding a new station, AND automatically creating the
+         * admin role documents in the 'admins' collection.
+         */
         async function handleAddStation(e) {
             e.preventDefault();
             const stationName = e.target.stationName.value.trim();
@@ -373,18 +380,42 @@
                 return;
             }
 
-            const newStationData = { 
-                name: stationName, 
-                crews: [],
-                managedBy: managerUid,
-                updater: updaterUid || null // Add updater UID, or null if empty
-            };
-            
+            // Use a batch write to ensure all operations succeed or fail together.
             try {
-                await db.collection("stations").add(newStationData);
+                // 1. Get a new write batch
+                const batch = db.batch();
+                
+                // 2. Add the new station to the batch
+                const stationsRef = db.collection("stations").doc(); // Create ref with new auto-ID
+                batch.set(stationsRef, { 
+                    name: stationName, 
+                    crews: [],
+                    managedBy: managerUid,
+                    updater: updaterUid || null
+                });
+
+                // 3. Add the manager role to the batch
+                // This will create or overwrite the doc 'admins/{managerUid}'
+                const managerRef = db.collection("admins").doc(managerUid);
+                batch.set(managerRef, { role: "manager" });
+
+                // 4. If an updater UID was provided, add it to the batch
+                if (updaterUid) {
+                    const updaterRef = db.collection("admins").doc(updaterUid);
+                    batch.set(updaterRef, { role: "updater" });
+                }
+
+                // 5. Commit the batch
+                await batch.commit();
+                
+                // Success!
                 addStationForm.reset();
+                errorContainer.classList.add('hidden'); // Hide any previous errors
+                errorMessage.textContent = '';
+
+
             } catch (error) { 
-                console.error("Error adding station: ", error); 
+                console.error("Error adding station and roles: ", error); 
                 showError(`Error adding station: ${error.message}`);
             }
         }
@@ -498,8 +529,14 @@
             confirmModalMessage.textContent = message;
             confirmModal.classList.remove('hidden');
             confirmModal.classList.add('flex');
-            const newConfirmBtn = confirmModalConfirm.cloneNode(true);
-            confirmModalConfirm.parentNode.replaceChild(newConfirmBtn, confirmModalConfirm);
+            
+            // --- FIX ---
+            // Find the button in the DOM *every time* to avoid stale references
+            let oldConfirmBtn = document.getElementById('confirm-modal-confirm');
+            
+            const newConfirmBtn = oldConfirmBtn.cloneNode(true);
+            oldConfirmBtn.parentNode.replaceChild(newConfirmBtn, oldConfirmBtn); 
+
             newConfirmBtn.addEventListener('click', () => { onConfirm(); closeConfirmModal(); }, { once: true });
         }
         function closeConfirmModal() {
@@ -525,6 +562,10 @@
                             currentUserRole = null; // This user is not in the admins table
                         }
                         currentUserUID = user.uid;
+                        
+                        // DEBUGGING: Log the user's UID and Role
+                        console.log(`[AUTH CHECK] User UID: ${currentUserUID}, Role: ${currentUserRole}`);
+
 
                         authContainer.style.display = 'none';
                         adminContent.style.display = 'block';
